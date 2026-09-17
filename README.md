@@ -1,4 +1,4 @@
-# 🛡️ PRA — Plan de Reprise d'Activité (/var/www/html)
+# 🛡️ PRA - Scripts de sauvegarde et restauration chiffrées
 
 Ce dépôt regroupe l'ensemble des procédures et scripts d'automatisation dédiés à la sauvegarde chiffrée, au versioning et à la restauration à chaud de l'arborescence web `/var/www/html`.
 
@@ -116,5 +116,7 @@ sudo ./restore_www.sh
 
 ## 🔒 Bonnes Pratiques & Sécurité
 
+- Stockage déporté : Ne conserve pas les clés de déchiffrement uniquement sur la machine hébergeant le site. En cas de perte matérielle du serveur, les sauvegardes deviendraient inutilisables.
+- Accès restreints : Seul l'utilisateur root doit avoir accès au dossier /backup/keys.
 * **Principe du moindre privilège** : le répertoire `/backup/keys/` doit impérativement rester sous permissions `700` (`rwx------`) appartenant à `root:root`.
 * **Externalisation** : synchroniser régulièrement les archives (`.tar.gz.enc`) vers un stockage distant (S3, NAS, SFTP secondaire) et conserver les clés dans un gestionnaire de secrets dédié (Vault, Bitwarden, Keepass).
