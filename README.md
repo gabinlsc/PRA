@@ -1,76 +1,120 @@
-# 🛡️ PRA - Scripts de Sauvegarde et Restauration Chiffrées
+# 🛡️ PRA — Plan de Reprise d'Activité (/var/www/html)
 
-Ensemble d'outils Bash permettant d'assurer la sauvegarde chiffrée et la restauration à chaud de l'arborescence web (/var/www/html).
+Ce dépôt regroupe l'ensemble des procédures et scripts d'automatisation dédiés à la sauvegarde chiffrée, au versioning et à la restauration à chaud de l'arborescence web `/var/www/html`.
 
----
-
-## 📋 Fonctionnalités
-
-- Chiffrement fort : AES-256-CBC avec dérivation de clé PBKDF2 (100 000 itérations).
-- Gestion des clés : Génération cryptographique aléatoire de 256 bits par archive (openssl rand).
-- Isolation sécurisée : Clés stockées avec permissions restreintes (chmod 600) et option d'effacement sécurisé (shred).
-- Restauration sécurisée : Déchiffrement à la volée, backup automatique du dossier existant avant écrasement et réapplication des droits www-data.
+Le projet propose deux implémentations complémentaires :
+* **Bash** : solution native, légère, basée sur `tar` et `openssl` (sans runtime supplémentaire).
+* **Python** : solution modulaire via la bibliothèque standard et `cryptography` (Fernet : AES-128-CBC + HMAC-SHA256).
 
 ---
 
-## ⚙️ Prérequis
+## 📁 Structure du Dépôt
 
-Installe les paquets nécessaires sur ta machine/VM Ubuntu :
-
-sudo apt update && sudo apt install -y openssl tar
+```text
+.
+├── backup_www.sh       # Script de sauvegarde Bash (OpenSSL AES-256-CBC)
+├── restore_www.sh      # Script de restauration Bash
+├── backup.py           # Script de sauvegarde Python (Fernet / AES + HMAC)
+├── restore.py          # Script de restauration Python
+├── requirements.txt    # Dépendances Python (cryptography)
+└── README.md           # Documentation globale
+```
 
 ---
 
-## 🚀 Installation
+## ⚙️ Prérequis Globaux
 
-1. Clone le projet (si ce n'est pas déjà fait) :
+Sur la machine ou VM Ubuntu hôte :
 
+```bash
+sudo apt update && sudo apt install -y openssl tar python3 python3-pip python3-venv
+```
+
+---
+
+## 🚀 Installation & Déploiement
+
+1. Cloner le dépôt :
+
+```bash
 git clone git@github.com:gabinlsc/PRA.git
 cd PRA
+```
 
-2. Rends les scripts exécutables et déploie-les dans les exécutables système :
+2. Préparer l'environnement Python :
 
-sudo chmod +x backup_www.sh restore_www.sh
-sudo cp backup_www.sh /usr/local/sbin/
-sudo cp restore_www.sh /usr/local/sbin/
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+3. Définir les permissions d'exécution :
+
+```bash
+chmod +x backup_www.sh restore_www.sh backup.py restore.py
+```
 
 ---
 
 ## 🛠️ Utilisation
 
-### 1. Sauvegarde (backup_www.sh)
-
-Lance le script en root :
-
-sudo /usr/local/sbin/backup_www.sh
-
-Un menu interactif s'affiche :
-- Option 1 : Archive le dossier /var/www/html, génère la clé, chiffre l'archive et conserve la clé dans /backup/keys/.
-- Option 2 : Même procédure, mais affiche la clé générée à l'écran pour la noter/stocker dans un coffre, puis la supprime du disque avec shred.
-
-Arborescence générée dans /backup :
-
-/backup/
-├── archives/   # Archives chiffrées (*.tar.gz.enc)
-├── keys/       # Clés de déchiffrement (*.key)
-└── logs/       # Journaux d'exécution (*.log)
+Les deux solutions partagent la même logique d'arborescence cible dans `/backup` :
+* `/backup/archives/` : archives compressées et chiffrées (`.enc`)
+* `/backup/keys/` : clés symétriques stockées localement (`.key`, droits `600`)
 
 ---
 
-### 2. Restauration (restore_www.sh)
+### Méthode 1 — Version Python (Recommandée)
 
-Pour restaurer une sauvegarde précédente :
+#### 1. Sauvegarde
 
-sudo /usr/local/sbin/restore_www.sh
+```bash
+sudo ./venv/bin/python backup.py
+```
 
-1. Sélectionne l'archive souhaitée dans la liste des sauvegardes disponibles.
-2. Le script utilise la clé locale associée ou t'invite à saisir la clé manuellement si elle a été supprimée du serveur.
-3. Le contenu actuel de /var/www/html est déplacé vers un dossier horodaté de sécurité (html.bak.*).
-4. L'archive est extraite et les permissions www-data:www-data (dossiers 755, fichiers 644) sont restaurées automatiquement.
+* **Option 1 (Standard)** : archive `/var/www/html`, génère une clé Fernet, chiffre l'archive et consigne la clé dans `/backup/keys/backup_<timestamp>.key`.
+* **Option 2 (Air-gap / Coffre)** : chiffre l'archive, imprime la clé unique sur la sortie standard (terminal) et ne conserve aucune trace sur le disque.
+
+#### 2. Restauration
+
+```bash
+sudo ./venv/bin/python restore.py
+```
+
+1. Détection et sélection interactive de l'archive dans `/backup/archives/`.
+2. Résolution automatique de la clé locale correspondante ou saisie manuelle si la clé a été externalisée.
+3. Rotation de précaution : déplacement de `/var/www/html` en `/var/www/html.bak.<timestamp>`.
+4. Déchiffrement en mémoire, décompression et réapplication récursive des permissions `www-data:www-data` (dossiers `755`, fichiers `644`).
 
 ---
 
-## ⚠️ Recommandations de sécurité
+### Méthode 2 — Version Bash (Sans dépendance Python)
 
-- Stockage déporté : Ne conserve pas les clés de déchiffrement uniquement sur la machine hébergeant le site. En cas de perte matérielle du serveur, les sauvegardes deviendraient inutilisables.
-- Accès restreints : Seul l'utilisateur root doit avoir accès au dossier /backup/keys.
+#### 1. Sauvegarde
+
+```bash
+sudo ./backup_www.sh
+```
+
+* Archive via `tar -czf`.
+* Chiffrement avec `openssl enc -aes-256-cbc -pbkdf2 -iter 100000`.
+* Génération de clé pseudo-aléatoire 256 bits (`openssl rand -base64 32`).
+* Choix entre stockage local sécurisé (`chmod 600`) ou effacement sécurisé (`shred -u`).
+
+#### 2. Restauration
+
+```bash
+sudo ./restore_www.sh
+```
+
+* Déchiffrement de l'archive via `openssl enc -d`.
+* Sauvegarde miroir préalable (`html.bak.*`).
+* Extraction et rétablissement des droits utilisateur web (`chown -R www-data:www-data`).
+
+---
+
+## 🔒 Bonnes Pratiques & Sécurité
+
+* **Principe du moindre privilège** : le répertoire `/backup/keys/` doit impérativement rester sous permissions `700` (`rwx------`) appartenant à `root:root`.
+* **Externalisation** : synchroniser régulièrement les archives (`.tar.gz.enc`) vers un stockage distant (S3, NAS, SFTP secondaire) et conserver les clés dans un gestionnaire de secrets dédié (Vault, Bitwarden, Keepass).
