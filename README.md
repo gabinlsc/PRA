@@ -1,4 +1,4 @@
-# 🛡️ PRA - Scripts de Sauvegarde et Restauration Chiffrées
+# 🛡️ PRA - Scripts de sauvegarde et restauration chiffrées
 
 Ensemble d'outils Bash permettant d'assurer la sauvegarde chiffrée et la restauration à chaud de l'arborescence web (/var/www/html).
 
